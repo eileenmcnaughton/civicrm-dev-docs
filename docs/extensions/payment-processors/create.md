@@ -85,55 +85,7 @@ It should have this basic template.
 ```php
 <?php
 
-require_once 'CRM/Core/Payment.php';
-
 class edu_ucmerced_payment_ucmpaymentcollection extends CRM_Core_Payment {
-  /**
-   * We only need one instance of this object. So we use the singleton
-   * pattern and cache the instance in this variable
-   *
-   * @var object
-   * @static
-   */
-  static private $_singleton = null;
-
-  /**
-   * mode of operation: live or test
-   *
-   * @var object
-   * @static
-   */
-  static protected $_mode = null;
-
-  /**
-   * Constructor
-   *
-   * @param string $mode the mode of operation: live or test
-   *
-   * @return void
-   */
-  function __construct( $mode, &$paymentProcessor ) {
-    $this->_mode             = $mode;
-    $this->_paymentProcessor = $paymentProcessor;
-    $this->_processorName    = ts('UC Merced Payment Collection');
-  }
-
-  /**
-   * singleton function used to manage this object
-   *
-   * @param string $mode the mode of operation: live or test
-   *
-   * @return object
-   * @static
-   *
-   */
-  static function &singleton( $mode, &$paymentProcessor ) {
-      $processorName = $paymentProcessor['name'];
-      if (self::$_singleton[$processorName] === null ) {
-          self::$_singleton[$processorName] = new edu_ucmerced_payment_ucmpaymentcollection( $mode, $paymentProcessor );
-      }
-      return self::$_singleton[$processorName];
-  }
 
   /**
    * This function checks to see if we have the right config values
@@ -158,23 +110,43 @@ class edu_ucmerced_payment_ucmpaymentcollection extends CRM_Core_Payment {
     }
   }
 
-  function doDirectPayment(&$params) {
-    CRM_Core_Error::fatal(ts('This function is not implemented'));
-  }
-
   /**
-   * Sets appropriate parameters for checking out to UCM Payment Collection
+   * Process payment - this function wraps around both doTransferPayment and doDirectPayment.
    *
-   * @param array $params  name value pair of contribution datat
+   * The function ensures an exception is thrown & moves some of this logic out of the form layer and makes the forms
+   * more agnostic.
    *
-   * @return void
-   * @access public
+   * Payment processors should set payment_status_id. This function adds some historical defaults ie. the
+   * assumption that if a 'doDirectPayment' processors comes back it completed the transaction & in fact
+   * doTransferCheckout would not traditionally come back.
    *
+   * doDirectPayment does not do an immediate payment for Authorize.net or Paypal so the default is assumed
+   * to be Pending.
+   *
+   * Once this function is fully rolled out then it will be preferred for processors to throw exceptions than to
+   * return Error objects
+   *
+   * @param array $params
+   *
+   * @param string $component
+   *
+   * @return array
+   *   Result array
+   *
+   * @throws \Civi\Payment\Exception\PaymentProcessorException
    */
-  function doTransferCheckout( &$params, $component ) {
-
-  }
-}
+     public function doPayment(&$params, $component = 'contribute') {
+       // do payment processing here
+       
+      // if successful
+      $result['payment_status_id'] = array_search('Completed', $statuses);
+      $result['trxn_id'] = $valueFromProcessor;
+      return $result;
+      
+      // if  not successful
+      throw new \Civi\Payment\Exception\PaymentProcessorException($errorMessage);
+     
+     }
 ```
 
 
@@ -187,27 +159,6 @@ the extension)
 class edu_ucmerced_payment_ucmpaymentcollection extends CRM_Core_Payment {
 ```
 
-The processor name needs to match the name of your processor.
-
-```php
-function __construct( $mode, &$paymentProcessor ) {
-  $this->_mode             = $mode;
-  $this->_paymentProcessor = $paymentProcessor;
-  $this->_processorName    = ts('UC Merced Payment Collection');
-}
-```
-
-This method should call your class name
-
-```php
-static function &singleton( $mode, &$paymentProcessor ) {
-    $processorName = $paymentProcessor['name'];
-    if (self::$_singleton[$processorName] === null ) {
-        self::$_singleton[$processorName] = new edu_ucmerced_payment_ucmpaymentcollection( $mode, $paymentProcessor );
-    }
-    return self::$_singleton[$processorName];
-}
-```
 
 You need to process the data given to you in the doTransferCheckout()
 method. Here is an example of how it's done in this processor
